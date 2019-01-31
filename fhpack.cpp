@@ -133,7 +133,8 @@ enum ProgramMode {
 };
 
 #define MAX_SIZE            8192
-#define MIN_SIZE            (MAX_SIZE - 8)  // without final screen hole
+//#define MIN_SIZE            (MAX_SIZE - 8)  // without final screen hole
+#define MIN_SIZE            256
 #define MAX_EXPANSION       100             // ((MAX_SIZE/255)+1) * 3 + 1
 
 #define MIN_MATCH_LEN       4
