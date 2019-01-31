@@ -11,7 +11,7 @@
 *                              *
 ********************************
          lst   off
-         org   $0300
+         org   $6000
 
 *
 * Constants
@@ -56,7 +56,7 @@ entry
          sta   dstptr
          lda   in_dst+1
          sta   dstptr+1
-         sta   _desthi+1
+         sta   ._desthi+1
 
          ldy   #$00
          lda   (srcptr),y
@@ -116,10 +116,10 @@ mainloop
          ldy   #$00
          lda   (srcptr),y ;get mixed-length byte
          sta   savmix
-         lsr   A          ;get the literal length
-         lsr   A
-         lsr   A
-         lsr   A
+         lsr             ;get the literal length
+         lsr
+         lsr
+         lsr
          beq   noliteral
          cmp   #$0f       ;sets carry for >= 15
          bne   shortlit
@@ -174,7 +174,7 @@ noliteral
          iny
          lda   (srcptr),y ;get length extension
          cmp   #237       ;"normal" values are 0-236
-         bge   specialmatch ;BCS
+         bcs   specialmatch ;BCS
          adc   #15        ;will not exceed 255
 
 * Put the destination address into copyptr.
@@ -187,7 +187,7 @@ noliteral
          sta   copyptr
          iny
          lda   (srcptr),y ;match offset, hi
-_desthi  ora   #$00       ;OR in hi-res page
+._desthi  ora   #$00       ;OR in hi-res page
          sta   copyptr+1
 
 * Advance srcptr past the encoded match while we still
@@ -223,17 +223,20 @@ nohi5                     ;hi5 clears carry
          sta   dstptr
          bcc   mainloop
          inc   dstptr+1
+         bne   mainloop   ;always (not unpacking at $FFxx)
 
-         DO    overrun_check
+         ;DO    overrun_check
          LDA   dstptr+1
          CMP   #$60
          bcc   mainloop
+         rts              ;GPH ADDED
+
          BRK
          BRK
 
-         ELSE
+         ;ELSE
 
-         bne   mainloop   ;always (not unpacking at $FFxx)
+         ;bne   mainloop   ;always (not unpacking at $FFxx)
 
          FIN
 
