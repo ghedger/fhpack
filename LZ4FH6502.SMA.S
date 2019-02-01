@@ -5,14 +5,13 @@
 * Version 1.0.1, August 2015   *
 *                              *
 * Refactored for size & speed  *
-* by Peter Ferrie.  (This      *
-* version favors code size.)   *
+* by Peter Ferrie.             *
 *                              *
 * Developed with Merlin-16     *
 *                              *
 ********************************
          lst   off
-         org   $0300
+         org   $6000
 
 *
 * Constants
@@ -26,12 +25,12 @@ overrun_check equ 0
 *
 * Variable storage
 *
-srcptr   equ   $3c        ;2b a1l
-dstptr   equ   $3e        ;2b a1h
-copyptr  equ   $00        ;2b
-savmix   equ   $02        ;1b
-savlen   equ   $03        ;1b
-savsrc   equ   $04        ;1b
+srcptr   equ   $ec        ;2b a1l
+dstptr   equ   $ee        ;2b a1h
+copyptr  equ   $f9        ;2b
+savmix   equ   $fb        ;1b
+savlen   equ   $fc        ;1b
+savsrc   equ   $fd        ;1b
 
 *
 * ROM routines
@@ -49,7 +48,7 @@ monitor  equ   $ff69
 in_src   equ   $2fc       ;2b
 in_dst   equ   $2fe       ;2b
 
-entry
+.DECOMPRESS
          lda   in_src     ;copy source address to zero page
          sta   srcptr
          lda   in_src+1
@@ -58,7 +57,7 @@ entry
          sta   dstptr
          lda   in_dst+1
          sta   dstptr+1
-         sta   _desthi+1
+         sta   ._desthi+1
 
          ldy   #$00
          lda   (srcptr),y
@@ -116,10 +115,10 @@ mainloop
          ldy   #$00
          lda   (srcptr),y ;get mixed-length byte
          sta   savmix
-         lsr   A          ;get the literal length
-         lsr   A
-         lsr   A
-         lsr   A
+         lsr             ;get the literal length
+         lsr
+         lsr
+         lsr
          beq   noliteral
          cmp   #$0f       ;sets carry for >= 15
          bne   shortlit
@@ -169,12 +168,12 @@ noliteral
          lda   savmix
          and   #$0f
          cmp   #$0f
-         blt   :shortmatch ;BCC
+         bcc   :shortmatch ;BCC
 
          iny
          lda   (srcptr),y ;get length extension
          cmp   #237       ;"normal" values are 0-236
-         bge   specialmatch ;BCS
+         bcs   specialmatch ;BCS
          adc   #15        ;will not exceed 255
 
 * Put the destination address into copyptr.
@@ -187,7 +186,8 @@ noliteral
          sta   copyptr
          iny
          lda   (srcptr),y ;match offset, hi
-_desthi  ora   #$00       ;OR in hi-res page
+         clc
+._desthi adc   #$00       ;Add the base address for decomp
          sta   copyptr+1
 
 * Advance srcptr past the encoded match while we still
@@ -222,15 +222,7 @@ linkadv
          bcc   advsrc1
 
          inc   dstptr+1
-         DO    overrun_check
-         LDA   dstptr+1
-         CMP   #$60
-         bcc   linkadv
-         BRK
-         BRK
-
-         ELSE
-         bne   advsrc2
+         jmp advsrc2
 
          FIN
 
