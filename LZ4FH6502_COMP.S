@@ -67,6 +67,7 @@ numliterals   equ   $2f4       ;1b
 longestmatch  equ   $2f5       ;1b
 matchoffset   equ   $2f6       ;2b
 inEnd         equ   $2f8       ;2b
+outEnd         equ   $2f8       ;2b
 inLen         equ   $2fa       ;2b
 inBuf         equ   $2fc       ;2b
 in_dst        equ   $2fe       ;2b
@@ -341,13 +342,13 @@ compexit
            lda   #EOD_MATCH_TOKEN
            jsr   output_byte
 
+                                    ; save output
+           lda   outPtr
+           sta   outEnd
+           lda   outPtr+1
+           sta   outEnd+1
 
-           jsr   comp_restorezp   ;put zero page back
-           rts
-
-fail
-           jsr   bell
-           jmp   monitor
+           jmp   comp_restorezp   ;put zero page back
 
 * output_byte
 *
@@ -525,8 +526,9 @@ gmll
            cmp (T0),y
            bne gml_done
            iny
-           cpy #MAX_MATCH_LEN
-           bcc gmll
+           bne gmll
+
+           ldy #MAX_MATCH_LEN
 gml_done
            sty matchlen
            rts
