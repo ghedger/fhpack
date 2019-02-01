@@ -143,9 +143,7 @@ compcont
            ;       numLiterals = 0;
            lda   #$ff
            jsr   output_byte
-           lda   #MAX_LITERAL_LEN
-           sec
-           sbc   #INITIAL_LEN
+           lda   #240
            jsr   output_byte
            jsr   comp_memcpy
 
@@ -225,10 +223,18 @@ compgoodmatch
 
 compsetmixedlen_am
            sta    mixedlengths
+           clc
            bcc    compchecknumliterals      ; (cf=0)
 compsetmixedlen_initial
            lda    #INITIAL_LEN
            sta    mixedlengths
+
+           ;    if (numLiterals <= INITIAL_LEN) {
+           ;        mixedLengths |= numLiterals << 4;
+           ;    } else {
+           ;        mixedLengths |= INITIAL_LEN << 4;
+           ;    }
+
 compchecknumliterals
            lda    numliterals
            cmp    #INITIAL_LEN
@@ -248,8 +254,12 @@ compnumliterals_ilsh4
            ora    #INITIAL_LEN_SH4
            sta    mixedlengths
 
+           ;    *outPtr++ = mixedLengths;
+
 compoutputmixedlengths
            jsr    output_byte     ; a holds mixedlengths
+
+           ;    // Output the literals, starting with the extended length.
            ;    if (numLiterals >= INITIAL_LEN) {
            ;        *outPtr++ = numLiterals - INITIAL_LEN;
            ;    }
@@ -261,8 +271,7 @@ compoutputmixedlengths
 
            ;    memcpy(outPtr, literalSrcPtr, numLiterals);
            ;    outPtr += numLiterals;
-comp_copy
-           jsr   comp_memcpy
+comp_copy  jsr   comp_memcpy
 
            ;   numLiterals = 0;
            ;   literalSrcPtr = NULL;       // debug/sanity check
@@ -271,9 +280,11 @@ comp_copy
            sta    literalsrcptr
            sta    literalsrcptr+1
 
-           ;   if (adjustedMatch >= INITIAL_LEN) {
-           ;       *outPtr++ = adjustedMatch - INITIAL_LEN;
-           ;   }
+           ;    // Now output the match, starting with the extended length.
+           ;    if (adjustedMatch >= INITIAL_LEN) {
+           ;        *outPtr++ = adjustedMatch - INITIAL_LEN;
+           ;    }
+
            lda    adjustedmatch
            cmp    #INITIAL_LEN
            bcc    comp_writematchoffset
@@ -306,13 +317,6 @@ comp_writematchoffset
            ;        *outPtr++ = 0xff;
            ;        *outPtr++ = numLiterals - INITIAL_LEN;
            ;    }
-           ;    memcpy(outPtr, literalSrcPtr, numLiterals);
-           ;    outPtr += numLiterals;
-
-           ;    *outPtr++ = EOD_MATCH_TOKEN;
-
-           ;    return outPtr - outBuf;
-
 compdone
            lda   numliterals
            cmp   #INITIAL_LEN
@@ -322,10 +326,10 @@ compdone
            lda   #$ff
            jsr   output_byte
            lda   numliterals
-           sec
-           sbc   #INITIAL_LEN
+           sbc   #INITIAL_LEN     ; (cf=1)
            jsr   output_byte
            jmp   compexit
+
            ; *outPtr++ = (numLiterals << 4) | 0x0f;
 
 compdone_dumpnumlit
@@ -336,6 +340,11 @@ compdone_dumpnumlit
            asl
            ora   #$0f
            jsr   output_byte
+
+           ;    memcpy(outPtr, literalSrcPtr, numLiterals);
+           ;    outPtr += numLiterals;
+           ;    *outPtr++ = EOD_MATCH_TOKEN;
+           ;    return outPtr - outBuf;
 
 compexit
            jsr   comp_memcpy
@@ -348,7 +357,7 @@ compexit
            lda   outPtr+1
            sta   outEnd+1
 
-           jmp   comp_restorezp   ;put zero page back
+           jmp   comp_restorezp   ;put zero page back and exit
 
 * output_byte
 *
@@ -409,7 +418,8 @@ flml       lda   ii+1
            bcc   flm_lcont
            lda   ii
            cmp   maxstartoffset
-           bcs   flm_done
+           bcc   flm_lcont
+           jmp   flm_done
 
 flm_lcont
          ; size_t maxMatchLen = inLen - (matchPtr - inBuf);
@@ -461,6 +471,7 @@ flm_noverflow
            lda   ii+1
            adc   inBuf+1
            sta   T0+1
+           ldx   maxmatchlen
            jsr   getmatchlen
 
          ; if (matchLen > longest) {
@@ -491,7 +502,10 @@ flm_checkmaxlen
 
          ; increment ii
            inc   ii
-           bne   flml
+           beq   flml_inciihi
+           jmp   flml
+
+flml_inciihi
            inc   ii+1
            jmp   flml
 
@@ -526,6 +540,8 @@ gmll
            cmp (T0),y
            bne gml_done
            iny
+           dex
+           beq gml_done
            bne gmll
 
            ldy #MAX_MATCH_LEN
@@ -540,8 +556,9 @@ comp_memcpy
          ;    memcpy(outPtr, literalSrcPtr, numLiterals);
          ;    outPtr += numLiterals;
            ldy #0
-cml
-           lda (literalsrcptr),y
+           lda numliterals
+           beq cmexit
+cml        lda (literalsrcptr),y
            sta (outPtr),y
            iny
            cpy numliterals
@@ -556,7 +573,8 @@ cml
            lda outPtr+1
            adc #0
            sta outPtr+1
-           rts
+
+cmexit     rts
 
 
 * comp_savezp
